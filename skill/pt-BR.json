@@ -126,6 +126,44 @@
             "quando é a próxima soneca",
             "Dante quando vai dormir"
           ]
+        },
+        {
+          "name": "RegisterSleepIntent",
+          "slots": [
+            { "name": "time", "type": "AMAZON.TIME" },
+            { "name": "duration", "type": "AMAZON.DURATION" }
+          ],
+          "samples": [
+            "Dante dormiu",
+            "Dante foi dormir",
+            "registrar que Dante dormiu",
+            "anota que Dante dormiu",
+            "Dante dormiu às {time}",
+            "Dante foi dormir às {time}",
+            "Dante dormiu há {duration}",
+            "Dante foi dormir há {duration}",
+            "registrar Dante dormiu às {time}",
+            "registrar Dante dormiu há {duration}"
+          ]
+        },
+        {
+          "name": "RegisterAwakeIntent",
+          "slots": [
+            { "name": "time", "type": "AMAZON.TIME" },
+            { "name": "duration", "type": "AMAZON.DURATION" }
+          ],
+          "samples": [
+            "Dante acordou",
+            "registrar que Dante acordou",
+            "anota que Dante acordou",
+            "Dante foi acordar",
+            "Dante acordou às {time}",
+            "Dante foi acordar às {time}",
+            "Dante acordou há {duration}",
+            "Dante foi acordar há {duration}",
+            "registrar Dante acordou às {time}",
+            "registrar Dante acordou há {duration}"
+          ]
         }
       ],
       "types": []

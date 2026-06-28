@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore';
 import { getDb, USER_ID } from './firebase';
 
 // Brazil timezone offset: UTC-3 (UTC-2 during summer, but we use -3 as default)
@@ -234,4 +235,141 @@ export function fmtTime(date: Date): string {
   const hh = local.getUTCHours().toString().padStart(2, '0');
   const mm = local.getUTCMinutes().toString().padStart(2, '0');
   return `${hh} horas e ${mm} minutos`;
+}
+
+// ─── Registration ─────────────────────────────────────────────────────────────
+
+export interface RegisterResult {
+  success: boolean;
+  message: string;
+}
+
+export async function registerSleep(
+  timeSlot?: string,    // "HH:MM" from AMAZON.TIME
+  durationSlot?: string // "PT5M" ISO 8601 from AMAZON.DURATION
+): Promise<RegisterResult> {
+  const entries = await loadEntries();
+
+  if (isSleepingNow(entries)) {
+    const diff = Date.now() - entries[0].slept!.getTime();
+    return {
+      success: false,
+      message: `Dante já está dormindo há ${fmtDuration(diff)}. Não é possível registrar novamente.`,
+    };
+  }
+
+  const sleptAt = resolveTime(timeSlot, durationSlot);
+  const isDay = isDaytime(sleptAt);
+
+  const db = getDb();
+  const entryId = db.collection('sleep_entries').doc().id;
+  const now = new Date().toISOString();
+
+  await db.collection('sleep_entries').doc(USER_ID).set(
+    {
+      [entryId]: {
+        slept: sleptAt.toISOString(),
+        wokeUp: null,
+        isDay,
+        bottle: false,
+        bottleTime: null,
+        createdAt: now,
+        updatedAt: now,
+      },
+      updatedAt: FieldValue.serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  const type = isDay ? 'Soneca' : 'Sono noturno';
+  return {
+    success: true,
+    message: `${type} registrado. Dante dormiu às ${fmtTime(sleptAt)}. Bons sonhos!`,
+  };
+}
+
+export async function registerAwake(
+  timeSlot?: string,
+  durationSlot?: string
+): Promise<RegisterResult> {
+  const entries = await loadEntries();
+  const sleeping = entries.find(e => e.slept && !e.wokeUp);
+
+  if (!sleeping) {
+    return {
+      success: false,
+      message: 'Dante não está registrado como dormindo. Não há nada para encerrar.',
+    };
+  }
+
+  const wokeAt = resolveTime(timeSlot, durationSlot);
+
+  if (wokeAt < sleeping.slept!) {
+    return {
+      success: false,
+      message: `O horário informado é anterior ao início do sono (${fmtTime(sleeping.slept!)}). Verifique e tente novamente.`,
+    };
+  }
+
+  const dur = wokeAt.getTime() - sleeping.slept!.getTime();
+  const db = getDb();
+
+  await db.collection('sleep_entries').doc(USER_ID).update({
+    [`${sleeping.id}.wokeUp`]: wokeAt.toISOString(),
+    [`${sleeping.id}.updatedAt`]: new Date().toISOString(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+
+  return {
+    success: true,
+    message: `Registrado. Dante acordou às ${fmtTime(wokeAt)} após ${fmtDuration(dur)} de sono. Bom dia!`,
+  };
+}
+
+// ─── Time resolution helpers ──────────────────────────────────────────────────
+
+function resolveTime(timeSlot?: string, durationSlot?: string): Date {
+  const now = new Date();
+  if (durationSlot) return new Date(now.getTime() - parseDurationMs(durationSlot));
+  if (timeSlot) return parseTimeSlot(timeSlot);
+  return now;
+}
+
+// Parses ISO 8601 duration: PT5M, PT1H, PT1H30M, P1D
+function parseDurationMs(iso: string): number {
+  const m = iso.match(/P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/i);
+  if (!m) return 0;
+  const days = parseInt(m[1] ?? '0');
+  const hours = parseInt(m[2] ?? '0');
+  const mins = parseInt(m[3] ?? '0');
+  const secs = parseInt(m[4] ?? '0');
+  return ((days * 24 + hours) * 3600 + mins * 60 + secs) * 1000;
+}
+
+// Parses "HH:MM" from Alexa AMAZON.TIME slot, resolving to Brazil local time
+function parseTimeSlot(slot: string): Date {
+  const [hStr, mStr] = slot.split(':');
+  const h = parseInt(hStr);
+  const m = parseInt(mStr ?? '0');
+
+  const now = new Date();
+  // Work in Brazil local time
+  const localNow = new Date(now.getTime() + TZ_OFFSET_HOURS * 3_600_000);
+  const candidate = new Date(localNow);
+  candidate.setUTCHours(h, m, 0, 0);
+
+  // If the candidate is more than 1 minute in the future, it must be yesterday
+  if (candidate.getTime() > localNow.getTime() + 60_000) {
+    candidate.setUTCDate(candidate.getUTCDate() - 1);
+  }
+
+  // Convert back to UTC
+  return new Date(candidate.getTime() - TZ_OFFSET_HOURS * 3_600_000);
+}
+
+// Daytime = 06:00–19:59 Brazil local time
+function isDaytime(date: Date): boolean {
+  const local = new Date(date.getTime() + TZ_OFFSET_HOURS * 3_600_000);
+  const h = local.getUTCHours();
+  return h >= 6 && h < 20;
 }

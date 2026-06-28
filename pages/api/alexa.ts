@@ -9,8 +9,12 @@ import {
   answerSleepToday,
   answerSleep24h,
   answerLastNight,
+  registerSleep,
+  registerAwake,
 } from '../../lib/sleep';
 import { predictNextNap } from '../../lib/ai';
+
+type AlexaSlots = Record<string, { value?: string }> | undefined;
 
 // ─── Alexa response builder ───────────────────────────────────────────────────
 
@@ -45,7 +49,11 @@ function welcome() {
 
 // ─── Intent handler ───────────────────────────────────────────────────────────
 
-async function handleIntent(intentName: string): Promise<object> {
+function slotValue(slots: AlexaSlots, name: string): string | undefined {
+  return slots?.[name]?.value || undefined;
+}
+
+async function handleIntent(intentName: string, slots?: AlexaSlots): Promise<object> {
   // Standard Alexa built-ins
   if (
     intentName === 'AMAZON.StopIntent' ||
@@ -84,6 +92,22 @@ async function handleIntent(intentName: string): Promise<object> {
 
       case 'LastNightIntent':
         return speak(answerLastNight(entries));
+
+      case 'RegisterSleepIntent': {
+        const result = await registerSleep(
+          slotValue(slots, 'time'),
+          slotValue(slots, 'duration')
+        );
+        return speak(result.message);
+      }
+
+      case 'RegisterAwakeIntent': {
+        const result = await registerAwake(
+          slotValue(slots, 'time'),
+          slotValue(slots, 'duration')
+        );
+        return speak(result.message);
+      }
 
       case 'NextNapIntent': {
         const text = await predictNextNap(entries, profile ?? {
@@ -124,7 +148,7 @@ export default async function handler(
   const body = req.body as {
     request?: {
       type?: string;
-      intent?: { name?: string };
+      intent?: { name?: string; slots?: AlexaSlots };
     };
     session?: { application?: { applicationId?: string } };
   };
@@ -146,7 +170,8 @@ export default async function handler(
 
   if (requestType === 'IntentRequest') {
     const intentName = body.request?.intent?.name ?? '';
-    const response = await handleIntent(intentName);
+    const slots = body.request?.intent?.slots;
+    const response = await handleIntent(intentName, slots);
     return res.json(response);
   }
 
