@@ -1,0 +1,134 @@
+{
+  "interactionModel": {
+    "languageModel": {
+      "invocationName": "sono do dante",
+      "intents": [
+        {
+          "name": "AMAZON.CancelIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.HelpIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.StopIntent",
+          "samples": []
+        },
+        {
+          "name": "AMAZON.NavigateHomeIntent",
+          "samples": []
+        },
+        {
+          "name": "IsSleepingIntent",
+          "slots": [],
+          "samples": [
+            "Dante está dormindo",
+            "Dante está dormindo agora",
+            "o Dante está dormindo",
+            "Dante está acordado",
+            "o Dante está acordado",
+            "Dante está acordado agora",
+            "qual é o estado atual do Dante",
+            "o que o Dante está fazendo agora",
+            "Dante está dormindo ou acordado"
+          ]
+        },
+        {
+          "name": "HowLongSleepingIntent",
+          "slots": [],
+          "samples": [
+            "há quanto tempo Dante está dormindo",
+            "faz quanto tempo que Dante está dormindo",
+            "quanto tempo Dante está dormindo",
+            "há quanto tempo o Dante dorme",
+            "faz quanto tempo que o Dante dorme",
+            "quanto tempo faz que Dante dorme",
+            "desde quando Dante está dormindo",
+            "quando Dante dormiu"
+          ]
+        },
+        {
+          "name": "HowLongAwakeIntent",
+          "slots": [],
+          "samples": [
+            "há quanto tempo Dante está acordado",
+            "faz quanto tempo que Dante está acordado",
+            "quanto tempo Dante está acordado",
+            "há quanto tempo o Dante acordou",
+            "quando Dante acordou",
+            "desde quando Dante está acordado",
+            "quanto tempo faz que Dante acordou"
+          ]
+        },
+        {
+          "name": "LastNapIntent",
+          "slots": [],
+          "samples": [
+            "quando foi a última soneca",
+            "quando foi a última soneca do Dante",
+            "qual foi a última soneca de Dante",
+            "Dante dormiu alguma soneca hoje",
+            "quando Dante dormiu a última soneca",
+            "última soneca do Dante",
+            "quanto tempo durou a última soneca do Dante"
+          ]
+        },
+        {
+          "name": "SleepTodayIntent",
+          "slots": [],
+          "samples": [
+            "quanto tempo Dante dormiu hoje",
+            "quantas horas Dante dormiu hoje",
+            "total de sono hoje",
+            "quanto Dante dormiu hoje",
+            "horas de sono hoje",
+            "quanto sono Dante teve hoje"
+          ]
+        },
+        {
+          "name": "Sleep24hIntent",
+          "slots": [],
+          "samples": [
+            "quantas horas de sono nas últimas vinte e quatro horas",
+            "quanto Dante dormiu nas últimas vinte e quatro horas",
+            "total de sono nas últimas vinte e quatro horas",
+            "horas de sono nas últimas vinte e quatro horas",
+            "quanto sono Dante teve nas últimas vinte e quatro horas",
+            "sono das últimas vinte e quatro horas"
+          ]
+        },
+        {
+          "name": "LastNightIntent",
+          "slots": [],
+          "samples": [
+            "como foi a noite anterior",
+            "como Dante dormiu ontem à noite",
+            "como foi o sono noturno do Dante",
+            "como foi a noite do Dante",
+            "Dante dormiu bem ontem",
+            "como foi a última noite do Dante",
+            "resumo da noite do Dante"
+          ]
+        },
+        {
+          "name": "NextNapIntent",
+          "slots": [],
+          "samples": [
+            "quando devo esperar a próxima soneca",
+            "qual a previsão da próxima soneca",
+            "quando será a próxima soneca do Dante",
+            "quando Dante vai dormir de novo",
+            "próxima soneca do Dante",
+            "quando Dante vai tirar uma soneca",
+            "quando Dante deve dormir",
+            "previsão da próxima soneca",
+            "quando é a próxima soneca",
+            "Dante quando vai dormir"
+          ]
+        }
+      ],
+      "types": []
+    }
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "pages/api/alexa.ts": {
+      "maxDuration": 10
+    }
+  }
+}
