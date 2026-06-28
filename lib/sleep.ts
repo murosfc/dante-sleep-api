@@ -367,9 +367,10 @@ function parseTimeSlot(slot: string): Date {
   return new Date(candidate.getTime() - TZ_OFFSET_HOURS * 3_600_000);
 }
 
-// Daytime = 06:00–19:59 Brazil local time
+// Daytime = 06:00–18:29 Brazil local time; 18:30+ is night sleep
 function isDaytime(date: Date): boolean {
   const local = new Date(date.getTime() + TZ_OFFSET_HOURS * 3_600_000);
   const h = local.getUTCHours();
-  return h >= 6 && h < 20;
+  const m = local.getUTCMinutes();
+  return h >= 6 && (h < 18 || (h === 18 && m < 30));
 }
