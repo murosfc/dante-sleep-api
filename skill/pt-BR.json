@@ -87,7 +87,7 @@
           ]
         },
         {
-          "name": "Sleep24hIntent",
+          "name": "SleepLastDayIntent",
           "slots": [],
           "samples": [
             "quantas horas de sono nas últimas vinte e quatro horas",

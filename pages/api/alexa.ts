@@ -87,7 +87,7 @@ async function handleIntent(intentName: string, slots?: AlexaSlots): Promise<obj
       case 'SleepTodayIntent':
         return speak(answerSleepToday(entries));
 
-      case 'Sleep24hIntent':
+      case 'SleepLastDayIntent':
         return speak(answerSleep24h(entries));
 
       case 'LastNightIntent':
