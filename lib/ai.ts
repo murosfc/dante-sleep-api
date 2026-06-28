@@ -1,4 +1,4 @@
-import { SleepEntry, BabyProfile, fmtTime } from './sleep';
+import { SleepEntry, BabyProfile } from './sleep';
 
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 const MODELS = [
