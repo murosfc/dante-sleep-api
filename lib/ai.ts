@@ -20,6 +20,32 @@ export async function predictNextNap(
   entries: SleepEntry[],
   profile: BabyProfile
 ): Promise<string> {
+  const now = new Date();
+  const TZ = -3;
+  const localNow = new Date(now.getTime() + TZ * 3_600_000);
+  const localHour = localNow.getUTCHours();
+  const sleeping = entries.length > 0 && entries[0].slept && !entries[0].wokeUp;
+
+  if (localHour >= 17 && !sleeping) {
+    const lastNap = entries.find(e => e.isDay && e.slept && e.wokeUp);
+    if (lastNap && lastNap.wokeUp) {
+      const t1 = new Date(lastNap.wokeUp.getTime() + 2 * 3_600_000);
+      const t2 = new Date(lastNap.wokeUp.getTime() + 2.5 * 3_600_000);
+      const formatTimeOnly = (date: Date) => {
+        const local = new Date(date.getTime() + TZ * 3_600_000);
+        const hh = local.getUTCHours().toString().padStart(2, '0');
+        const mm = local.getUTCMinutes().toString().padStart(2, '0');
+        return `${hh}:${mm}`;
+      };
+      return `Dante vai iniciar a rotina noturna e deve dormir por volta das ${formatTimeOnly(t1)} às ${formatTimeOnly(t2)}. Geralmente, com base nas estatísticas, ele dorme de 2 a 2:30 depois da última soneca.`;
+    } else {
+      const targetHour = profile.targetBedtimeHour ?? 20;
+      const targetMin = profile.targetBedtimeMinute ?? 0;
+      const targetStr = `${targetHour.toString().padStart(2, '0')}:${targetMin.toString().padStart(2, '0')}`;
+      return `Dante vai iniciar a rotina noturna e deve dormir por volta das ${targetStr}.`;
+    }
+  }
+
   const apiKey = (process.env.NVIDIA_API_KEY ?? '').trim();
   if (!apiKey) {
     return fallbackNextNap(entries);
