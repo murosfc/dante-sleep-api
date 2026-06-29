@@ -69,7 +69,7 @@ export async function predictNextNap(
 
 function buildPrompt(entries: SleepEntry[], profile: BabyProfile): string {
   const now = new Date();
-  const nowStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+  const nowStr = fmtRaw(now);
 
   const ageStr = profile.birthdate
     ? getAgeString(profile.birthdate)

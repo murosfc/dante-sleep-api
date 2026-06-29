@@ -27,7 +27,11 @@ function parseDate(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date) return value;
   if (typeof value === 'string') {
-    const d = new Date(value.trim());
+    let str = value.trim();
+    if (str.includes('T') && !str.endsWith('Z') && !/[+-]\d{2}:?\d{2}$/.test(str)) {
+      str = str + '-03:00';
+    }
+    const d = new Date(str);
     return isNaN(d.getTime()) ? null : d;
   }
   if (typeof value === 'object' && 'toDate' in (value as object)) {
