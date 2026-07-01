@@ -1,18 +1,18 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
+import { predictNextNap } from "../../lib/ai";
 import {
-  loadEntries,
-  loadBabyProfile,
-  answerHowLongSleeping,
   answerHowLongAwake,
+  answerHowLongSleeping,
   answerIsSleeping,
   answerLastNap,
-  answerSleepToday,
-  answerSleep24h,
   answerLastNight,
-  registerSleep,
+  answerSleep24h,
+  answerSleepToday,
+  loadBabyProfile,
+  loadEntries,
   registerAwake,
-} from '../../lib/sleep';
-import { predictNextNap } from '../../lib/ai';
+  registerSleep,
+} from "../../lib/sleep";
 
 type AlexaSlots = Record<string, { value?: string }> | undefined;
 
@@ -37,9 +37,12 @@ function speak(text: string, endSession = true) {
 }
 
 function welcome() {
+  return speak('Em que posso ser útil?', false);
+}
+
+function help() {
   return speak(
-    'Olá! Sou o assistente do sono do Dante. Você pode me perguntar: ' +
-      'Dante está dormindo? ' +
+    'Você pode me perguntar: Dante está dormindo? ' +
       'Há quanto tempo está acordado? ' +
       'Quando foi a última soneca? ' +
       'Ou: quando será a próxima soneca?',
@@ -62,7 +65,7 @@ async function handleIntent(intentName: string, slots?: AlexaSlots): Promise<obj
     return speak('Até mais!');
   }
   if (intentName === 'AMAZON.HelpIntent') {
-    return welcome();
+    return help();
   }
 
   try {
@@ -115,9 +118,6 @@ async function handleIntent(intentName: string, slots?: AlexaSlots): Promise<obj
           birthdate: null,
           sex: 'male',
           feedingType: 'breast',
-          nightRoutineMinutes: 30,
-          targetBedtimeHour: 20,
-          targetBedtimeMinute: 0,
         });
         return speak(text);
       }

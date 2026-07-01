@@ -18,9 +18,6 @@ export interface BabyProfile {
   birthdate: Date | null;
   sex: string;
   feedingType: string;
-  nightRoutineMinutes: number;
-  targetBedtimeHour: number | null;
-  targetBedtimeMinute: number | null;
 }
 
 function parseDate(value: unknown): Date | null {
@@ -87,9 +84,6 @@ export async function loadBabyProfile(): Promise<BabyProfile | null> {
     birthdate: parseDate(baby.birthdate),
     sex: (baby.sex as string) ?? 'male',
     feedingType: (baby.feedingType as string) ?? 'breast',
-    nightRoutineMinutes: Number(baby.nightRoutineMinutes ?? 30),
-    targetBedtimeHour: baby.targetBedtimeHour != null ? Number(baby.targetBedtimeHour) : null,
-    targetBedtimeMinute: baby.targetBedtimeMinute != null ? Number(baby.targetBedtimeMinute) : null,
   };
 }
 

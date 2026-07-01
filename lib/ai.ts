@@ -6,52 +6,34 @@ const MODELS = [
   'meta/llama-3.1-70b-instruct',
 ];
 const TIMEOUT_MS = 7_000; // Stay within Alexa's 8s limit
+const TZ = -3;
+
+// Sanity bounds for a daytime wake window / nap duration used when averaging history
+const MIN_WINDOW_MS = 20 * 60_000;
+const MAX_WINDOW_MS = 6 * 3_600_000;
+const MIN_NAP_MS = 5 * 60_000;
+const MAX_NAP_MS = 4 * 3_600_000;
+const DEFAULT_WINDOW_MS = 2.25 * 3_600_000; // used only when there's no history at all
 
 interface AiResult {
   nextNapTime: string | null;
   nextNapRationale: string | null;
-  bedtimeRoutineStart: string | null;
-  bedtimeRationale: string | null;
-  nightWakeTime: string | null;
-  nightWakeRationale: string | null;
+  wakeTime: string | null;
+  wakeRationale: string | null;
 }
 
 export async function predictNextNap(
   entries: SleepEntry[],
   profile: BabyProfile
 ): Promise<string> {
-  const now = new Date();
-  const TZ = -3;
-  const localNow = new Date(now.getTime() + TZ * 3_600_000);
-  const localHour = localNow.getUTCHours();
-  const sleeping = entries.length > 0 && entries[0].slept && !entries[0].wokeUp;
-
-  if (localHour >= 17 && !sleeping) {
-    const lastNap = entries.find(e => e.isDay && e.slept && e.wokeUp);
-    if (lastNap && lastNap.wokeUp) {
-      const t1 = new Date(lastNap.wokeUp.getTime() + 2 * 3_600_000);
-      const t2 = new Date(lastNap.wokeUp.getTime() + 2.5 * 3_600_000);
-      const formatTimeOnly = (date: Date) => {
-        const local = new Date(date.getTime() + TZ * 3_600_000);
-        const hh = local.getUTCHours().toString().padStart(2, '0');
-        const mm = local.getUTCMinutes().toString().padStart(2, '0');
-        return `${hh}:${mm}`;
-      };
-      return `Dante vai iniciar a rotina noturna e deve dormir por volta das ${formatTimeOnly(t1)} às ${formatTimeOnly(t2)}. Geralmente, com base nas estatísticas, ele dorme de 2 a 2:30 depois da última soneca.`;
-    } else {
-      const targetHour = profile.targetBedtimeHour ?? 20;
-      const targetMin = profile.targetBedtimeMinute ?? 0;
-      const targetStr = `${targetHour.toString().padStart(2, '0')}:${targetMin.toString().padStart(2, '0')}`;
-      return `Dante vai iniciar a rotina noturna e deve dormir por volta das ${targetStr}.`;
-    }
-  }
+  const avgWindowMs = computeAvgAwakeWindow(entries);
 
   const apiKey = (process.env.NVIDIA_API_KEY ?? '').trim();
   if (!apiKey) {
-    return fallbackNextNap(entries);
+    return fallbackNextNap(entries, avgWindowMs);
   }
 
-  const prompt = buildPrompt(entries, profile);
+  const prompt = buildPrompt(entries, profile, avgWindowMs);
 
   for (const model of MODELS) {
     try {
@@ -84,16 +66,52 @@ export async function predictNextNap(
       if (!text) continue;
 
       const result = parseAiResponse(text);
-      return formatPredictionSpeech(result, entries);
+      return formatPredictionSpeech(result, entries, avgWindowMs);
     } catch {
       continue;
     }
   }
 
-  return fallbackNextNap(entries);
+  return fallbackNextNap(entries, avgWindowMs);
 }
 
-function buildPrompt(entries: SleepEntry[], profile: BabyProfile): string {
+// Average gap between waking up and falling asleep again for daytime naps,
+// computed from the entry history (most recent gaps weigh the prediction).
+function computeAvgAwakeWindow(entries: SleepEntry[]): number {
+  const sorted = [...entries].sort(
+    (a, b) => (a.slept?.getTime() ?? 0) - (b.slept?.getTime() ?? 0)
+  );
+
+  const gaps: number[] = [];
+  for (let i = 1; i < sorted.length; i++) {
+    const prev = sorted[i - 1];
+    const curr = sorted[i];
+    if (!prev.wokeUp || !curr.slept || !curr.isDay) continue;
+
+    const gap = curr.slept.getTime() - prev.wokeUp.getTime();
+    if (gap >= MIN_WINDOW_MS && gap <= MAX_WINDOW_MS) gaps.push(gap);
+  }
+
+  if (!gaps.length) return DEFAULT_WINDOW_MS;
+
+  const recent = gaps.slice(-10);
+  return recent.reduce((a, b) => a + b, 0) / recent.length;
+}
+
+// Average duration of completed daytime naps, used to predict a wake time
+// while Dante is currently sleeping.
+function computeAvgNapDuration(entries: SleepEntry[]): number {
+  const durations = entries
+    .filter(e => e.isDay && e.slept && e.wokeUp)
+    .slice(0, 10)
+    .map(e => e.wokeUp!.getTime() - e.slept!.getTime())
+    .filter(d => d >= MIN_NAP_MS && d <= MAX_NAP_MS);
+
+  if (!durations.length) return 0;
+  return durations.reduce((a, b) => a + b, 0) / durations.length;
+}
+
+function buildPrompt(entries: SleepEntry[], profile: BabyProfile, avgWindowMs: number): string {
   const now = new Date();
   const nowStr = fmtRaw(now);
 
@@ -123,31 +141,21 @@ function buildPrompt(entries: SleepEntry[], profile: BabyProfile): string {
     ? `Acordado desde ${fmtRaw(latest.wokeUp)}.`
     : 'Estado desconhecido.';
 
-  const targetBed =
-    profile.targetBedtimeHour != null
-      ? `${profile.targetBedtimeHour.toString().padStart(2, '0')}:${(profile.targetBedtimeMinute ?? 0).toString().padStart(2, '0')}`
-      : '20:00';
-
-  const routineStart = calcRoutineStart(
-    profile.targetBedtimeHour ?? 20,
-    profile.targetBedtimeMinute ?? 0,
-    profile.nightRoutineMinutes
-  );
+  const avgWindowStr = fmtWindowDuration(avgWindowMs);
 
   return `Você é um especialista em sono infantil. Horário atual: ${nowStr}. Bebê: ${ageStr}.
-Rotina noturna começa às ${routineStart}, objetivo dormir às ${targetBed}.
+A janela de vigília média do Dante, calculada com base no histórico de sonecas, é de aproximadamente ${avgWindowStr}.
 
 Histórico recente (mais recente primeiro):
 ${history}
 
 Contexto atual: ${ctx}
 
-Se o bebê está acordado: calcule a próxima soneca usando janela de vigília adequada para a idade.
-Se o bebê está dormindo: calcule quando deve acordar baseado no histórico.
-Se for fim de tarde e a soneca conflitar com a rotina noturna (${routineStart}), sugira soneca ponte (30-40 min) ou pule.
+Se o bebê está acordado: calcule o horário da próxima soneca somando a janela de vigília média (${avgWindowStr}) ao horário em que ele acordou.
+Se o bebê está dormindo: calcule quando deve acordar com base na duração média das sonecas no histórico.
 
 Responda APENAS com JSON válido (sem texto extra):
-{"nextNapTime":"HH:mm - HH:mm|null","nextNapRationale":"1 frase","bedtimeRoutineStart":"HH:mm|null","bedtimeRationale":"1 frase","nightWakeTime":"HH:mm|null","nightWakeRationale":"1 frase"}`;
+{"nextNapTime":"HH:mm - HH:mm|null","nextNapRationale":"1 frase","wakeTime":"HH:mm|null","wakeRationale":"1 frase"}`;
 }
 
 function parseAiResponse(raw: string): AiResult {
@@ -161,47 +169,59 @@ function parseAiResponse(raw: string): AiResult {
     return {
       nextNapTime: normTime(obj.nextNapTime as string | undefined),
       nextNapRationale: normStr(obj.nextNapRationale as string | undefined),
-      bedtimeRoutineStart: normTime(obj.bedtimeRoutineStart as string | undefined),
-      bedtimeRationale: normStr(obj.bedtimeRationale as string | undefined),
-      nightWakeTime: normTime(obj.nightWakeTime as string | undefined),
-      nightWakeRationale: normStr(obj.nightWakeRationale as string | undefined),
+      wakeTime: normTime(obj.wakeTime as string | undefined),
+      wakeRationale: normStr(obj.wakeRationale as string | undefined),
     };
   } catch {
     return emptyResult();
   }
 }
 
-function formatPredictionSpeech(result: AiResult, entries: SleepEntry[]): string {
+function formatPredictionSpeech(
+  result: AiResult,
+  entries: SleepEntry[],
+  avgWindowMs: number
+): string {
   const sleeping = entries[0]?.slept && !entries[0]?.wokeUp;
 
-  const parts: string[] = [];
-
-  if (sleeping && result.nightWakeTime) {
-    parts.push(`Dante deve acordar por volta das ${result.nightWakeTime}. ${result.nightWakeRationale ?? ''}`);
-  } else if (!sleeping && result.nextNapTime) {
-    parts.push(`A previsão da próxima soneca do Dante é das ${result.nextNapTime}. ${result.nextNapRationale ?? ''}`);
+  if (sleeping && result.wakeTime) {
+    return `Dante deve acordar por volta das ${result.wakeTime}. ${result.wakeRationale ?? ''}`.trim();
+  }
+  if (!sleeping && result.nextNapTime) {
+    return `A previsão da próxima soneca do Dante é das ${result.nextNapTime}. ${result.nextNapRationale ?? ''}`.trim();
   }
 
-  if (result.bedtimeRoutineStart) {
-    parts.push(`A rotina noturna deve começar às ${result.bedtimeRoutineStart}. ${result.bedtimeRationale ?? ''}`);
-  }
-
-  if (!parts.length) return fallbackNextNap(entries);
-  return parts.join(' ').trim();
+  return fallbackNextNap(entries, avgWindowMs);
 }
 
-function fallbackNextNap(entries: SleepEntry[]): string {
+function fallbackNextNap(entries: SleepEntry[], avgWindowMs: number): string {
   const sleeping = entries[0]?.slept && !entries[0]?.wokeUp;
+
   if (sleeping) {
-    return 'Dante está dormindo agora. Não consegui calcular quando vai acordar sem a chave de inteligência artificial configurada.';
+    const avgNapMs = computeAvgNapDuration(entries);
+    if (!avgNapMs) {
+      return 'Dante está dormindo agora. Ainda não há histórico suficiente para prever quando vai acordar.';
+    }
+    const wakeTime = new Date(entries[0].slept!.getTime() + avgNapMs);
+    return `Baseado no histórico, Dante deve acordar por volta das ${fmtTime(wakeTime)}.`;
   }
 
   const wokeUp = entries[0]?.wokeUp;
   if (!wokeUp) return 'Não há dados suficientes para prever a próxima soneca do Dante.';
 
-  // Simple heuristic: 2h wake window
-  const napTime = new Date(wokeUp.getTime() + 2 * 3_600_000);
-  return `Baseado no histórico simples, a próxima soneca do Dante pode ser por volta das ${fmtTime(napTime)}.`;
+  return buildNapPrediction(wokeUp, avgWindowMs);
+}
+
+// Predicts a nap window centered on the historical average wake window, with
+// a +/-15min margin, counted from the given wake-up time.
+function buildNapPrediction(wokeUp: Date, avgWindowMs: number): string {
+  const margin = 15 * 60_000;
+  const t1 = new Date(wokeUp.getTime() + avgWindowMs - margin);
+  const t2 = new Date(wokeUp.getTime() + avgWindowMs + margin);
+  return (
+    `Com base no histórico das janelas de hoje, a próxima soneca do Dante deve ser das ${fmtTime(t1)} às ${fmtTime(t2)}, ` +
+    `cerca de ${fmtWindowDuration(avgWindowMs)} depois de acordar.`
+  );
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -210,10 +230,8 @@ function emptyResult(): AiResult {
   return {
     nextNapTime: null,
     nextNapRationale: null,
-    bedtimeRoutineStart: null,
-    bedtimeRationale: null,
-    nightWakeTime: null,
-    nightWakeRationale: null,
+    wakeTime: null,
+    wakeRationale: null,
   };
 }
 
@@ -229,24 +247,24 @@ function normStr(v: string | undefined | null): string | null {
 }
 
 function fmtRaw(date: Date): string {
-  const TZ = -3;
   const local = new Date(date.getTime() + TZ * 3_600_000);
   return `${local.getUTCHours().toString().padStart(2, '0')}:${local.getUTCMinutes().toString().padStart(2, '0')}`;
 }
 
 function fmtTime(date: Date): string {
-  const TZ = -3;
   const local = new Date(date.getTime() + TZ * 3_600_000);
   const hh = local.getUTCHours().toString().padStart(2, '0');
   const mm = local.getUTCMinutes().toString().padStart(2, '0');
   return `${hh} horas e ${mm} minutos`;
 }
 
-function calcRoutineStart(bedH: number, bedM: number, routineMin: number): string {
-  const totalMin = bedH * 60 + bedM - routineMin;
-  const h = Math.floor(((totalMin % 1440) + 1440) / 60) % 24;
-  const m = ((totalMin % 60) + 60) % 60;
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+function fmtWindowDuration(ms: number): string {
+  const totalMin = Math.round(ms / 60_000);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  if (h === 0) return `${m} minutos`;
+  if (m === 0) return `${h} hora${h !== 1 ? 's' : ''}`;
+  return `${h} hora${h !== 1 ? 's' : ''} e ${m} minutos`;
 }
 
 function getAgeString(birthdate: Date): string {

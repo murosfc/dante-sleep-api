@@ -73,9 +73,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             birthdate: null,
             sex: 'male',
             feedingType: 'breast',
-            nightRoutineMinutes: 30,
-            targetBedtimeHour: 20,
-            targetBedtimeMinute: 0,
           });
         } catch (e: any) {
           nextNap = `Erro na previsão: ${e.message || e}`;
